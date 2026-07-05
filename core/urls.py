@@ -13,5 +13,6 @@ router.register("eval-logs", views.EvalLogViewSet, basename="evallog")
 urlpatterns = [
     path("health", views.health, name="health"),
     path("api/auth/token", obtain_auth_token, name="api-token-auth"),
+    path("api/ask", views.ask, name="ask"),
     path("api/", include(router.urls)),
 ]

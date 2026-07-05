@@ -1,5 +1,8 @@
 from django.conf import settings
 from django.db import models
+from pgvector.django import HnswIndex, VectorField
+
+EMBEDDING_DIMENSIONS = 1536  # text-embedding-3-small
 
 
 class Document(models.Model):
@@ -15,6 +18,33 @@ class Document(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class Chunk(models.Model):
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="chunks")
+    chunk_index = models.PositiveIntegerField()
+    content = models.TextField()
+    token_count = models.PositiveIntegerField()
+    embedding = VectorField(dimensions=EMBEDDING_DIMENSIONS, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["document_id", "chunk_index"]
+        constraints = [
+            models.UniqueConstraint(fields=["document", "chunk_index"], name="unique_chunk_per_document")
+        ]
+        indexes = [
+            HnswIndex(
+                name="chunk_embedding_hnsw",
+                fields=["embedding"],
+                m=16,
+                ef_construction=64,
+                opclasses=["vector_cosine_ops"],
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.document.title} #{self.chunk_index}"
 
 
 class Product(models.Model):
