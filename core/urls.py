@@ -14,5 +14,6 @@ urlpatterns = [
     path("health", views.health, name="health"),
     path("api/auth/token", obtain_auth_token, name="api-token-auth"),
     path("api/ask", views.ask, name="ask"),
+    path("api/agent/chat", views.agent_chat, name="agent-chat"),
     path("api/", include(router.urls)),
 ]

@@ -33,6 +33,7 @@ curl -X POST http://localhost:8000/api/auth/token \
 |---|---|---|
 | GET | `/health` | health-check, без авторизации |
 | POST | `/api/ask` | RAG: вопрос → ответ с указанием источника (или "не знаю") |
+| POST | `/api/agent/chat` | LangGraph-агент: сам выбирает инструмент (RAG / калькулятор комиссии / генератор описания) |
 | CRUD | `/api/documents/` | документы для RAG (политики/правила площадок) |
 | CRUD | `/api/products/` | товары продавца |
 | CRUD | `/api/conversations/` | история запросов к ассистенту (только свои) |
@@ -59,6 +60,15 @@ docker compose exec web python manage.py ingest_documents
 ```bash
 docker compose exec web python manage.py run_eval
 ```
+
+## Агент
+
+`POST /api/agent/chat` с `{"message": "...", "conversation_id": <опционально>}`. Без `conversation_id` создаётся новый разговор; с ним — диалог продолжается с сохранённым контекстом (состояние графа персистится в Postgres через `PostgresSaver`, `thread_id` = id разговора).
+
+Три инструмента, между которыми агент выбирает сам:
+- `search_policy_docs` — RAG-поиск по документам (обёртка над `/ask`)
+- `calculate_marketplace_fee` — калькулятор комиссии (обычная Python-функция, без LLM)
+- `generate_product_listing` — структурированное описание товара (Pydantic-схема: `title`, `bullet_points`, `attributes`, `category`; retry до 2 раз при невалидном JSON)
 
 ## Тесты
 

@@ -144,6 +144,8 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+LOGIN_REDIRECT_URL = '/api/ask'
+
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 
 # LLM_PROVIDER switches between the real OpenAI API and a local Ollama server
