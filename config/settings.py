@@ -145,3 +145,8 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+
+# LLM_PROVIDER switches between the real OpenAI API and a local Ollama server
+# exposing an OpenAI-compatible endpoint. Same client code, different backend.
+LLM_PROVIDER = os.environ.get('LLM_PROVIDER', 'openai')
+OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://host.docker.internal:11434/v1')

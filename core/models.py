@@ -2,7 +2,7 @@ from django.conf import settings
 from django.db import models
 from pgvector.django import HnswIndex, VectorField
 
-EMBEDDING_DIMENSIONS = 1536  # text-embedding-3-small
+EMBEDDING_DIMENSIONS = 1024  # bge-m3 (local, via Ollama); text-embedding-3-small is 1536
 
 
 class Document(models.Model):

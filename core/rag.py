@@ -1,5 +1,3 @@
-import os
-
 import tiktoken
 from django.conf import settings
 from openai import OpenAI
@@ -7,8 +5,11 @@ from pgvector.django import CosineDistance
 
 from .models import Chunk
 
-EMBEDDING_MODEL = "text-embedding-3-small"
-CHAT_MODEL = "gpt-4o-mini"
+_MODELS_BY_PROVIDER = {
+    "openai": {"embedding": "text-embedding-3-small", "chat": "gpt-4o-mini"},
+    "ollama": {"embedding": "bge-m3", "chat": "qwen2.5:7b-instruct"},
+}
+
 CHUNK_MAX_TOKENS = 400
 CHUNK_OVERLAP_TOKENS = 50
 RELEVANCE_THRESHOLD = 0.35  # min cosine similarity to trust a chunk (tuned empirically in eval)
@@ -17,10 +18,26 @@ _encoding = tiktoken.get_encoding("cl100k_base")
 _client = None
 
 
+def _provider():
+    return getattr(settings, "LLM_PROVIDER", "openai")
+
+
+def get_embedding_model():
+    return _MODELS_BY_PROVIDER[_provider()]["embedding"]
+
+
+def get_chat_model():
+    return _MODELS_BY_PROVIDER[_provider()]["chat"]
+
+
 def get_client():
     global _client
     if _client is None:
-        _client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", getattr(settings, "OPENAI_API_KEY", "")))
+        if _provider() == "ollama":
+            # Ollama's OpenAI-compatible endpoint ignores the key but the SDK requires one.
+            _client = OpenAI(base_url=settings.OLLAMA_BASE_URL, api_key="ollama")
+        else:
+            _client = OpenAI(api_key=settings.OPENAI_API_KEY)
     return _client
 
 
@@ -46,7 +63,7 @@ def chunk_text(text, max_tokens=CHUNK_MAX_TOKENS, overlap_tokens=CHUNK_OVERLAP_T
 def embed_texts(texts):
     if not texts:
         return []
-    response = get_client().embeddings.create(model=EMBEDDING_MODEL, input=texts)
+    response = get_client().embeddings.create(model=get_embedding_model(), input=texts)
     return [item.embedding for item in response.data]
 
 
@@ -111,7 +128,7 @@ def generate_answer(question, top_k=5):
     prompt = ANSWER_PROMPT_TEMPLATE.format(context=context, question=question)
 
     response = get_client().chat.completions.create(
-        model=CHAT_MODEL,
+        model=get_chat_model(),
         messages=[{"role": "user", "content": prompt}],
     )
 
