@@ -3,11 +3,16 @@ import json
 
 import redis
 import tiktoken
+import torch
 from django.conf import settings
 from openai import OpenAI
 from pgvector.django import CosineDistance
+from sentence_transformers import CrossEncoder
 
 from .models import Chunk
+
+RERANK_MODEL = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"  # multilingual, covers Russian
+RERANK_CANDIDATES = 20  # how many cosine-similarity candidates to feed the reranker
 
 EMBEDDING_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # embeddings for a given model are deterministic
 
@@ -36,6 +41,7 @@ RELEVANCE_THRESHOLD = 0.35  # min cosine similarity to trust a chunk (tuned empi
 _encoding = tiktoken.get_encoding("cl100k_base")
 _client = None
 _redis_client = None
+_reranker = None
 
 
 def get_redis_client():
@@ -43,6 +49,13 @@ def get_redis_client():
     if _redis_client is None:
         _redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
     return _redis_client
+
+
+def get_reranker():
+    global _reranker
+    if _reranker is None:
+        _reranker = CrossEncoder(RERANK_MODEL, activation_fn=torch.nn.Sigmoid())
+    return _reranker
 
 
 def _embedding_cache_key(model, text):
@@ -149,14 +162,24 @@ def ingest_document(document):
 
 
 def retrieve(question, top_k=5):
-    """Return (chunks, embedding_tokens_used) for the top_k chunks most similar to the question."""
+    """Return (chunks, embedding_tokens_used). Two-stage retrieval: pgvector cosine
+    similarity narrows the whole corpus down to RERANK_CANDIDATES chunks (cheap,
+    index-backed), then a cross-encoder reranker — which looks at the question and
+    chunk together instead of comparing two independent vectors — reorders those
+    candidates for the final top_k. This fixes cases where cosine similarity ranks
+    a superficially-similar chunk from the wrong document above the right one."""
     embeddings, embedding_tokens = embed_texts([question])
-    queryset = (
+    candidates = list(
         Chunk.objects.select_related("document")
         .annotate(distance=CosineDistance("embedding", embeddings[0]))
-        .order_by("distance")[:top_k]
+        .order_by("distance")[:RERANK_CANDIDATES]
     )
-    results = [{"chunk": chunk, "similarity": 1 - chunk.distance} for chunk in queryset]
+    if not candidates:
+        return [], embedding_tokens
+
+    scores = get_reranker().predict([(question, chunk.content) for chunk in candidates])
+    ranked = sorted(zip(candidates, scores), key=lambda pair: pair[1], reverse=True)[:top_k]
+    results = [{"chunk": chunk, "similarity": float(score)} for chunk, score in ranked]
     return results, embedding_tokens
 
 

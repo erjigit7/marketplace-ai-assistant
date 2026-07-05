@@ -14,6 +14,7 @@ Django + DRF, PostgreSQL + pgvector, Redis, Celery, LangGraph, OpenAI API, Pydan
 | `db` | PostgreSQL + pgvector |
 | `redis` | брокер/backend Celery (db 1), кэш эмбеддингов (db 0), кэш rate-limit (db 2) |
 | `flower` | мониторинг очереди Celery — http://localhost:5555 |
+| `demo` | Streamlit чат-UI поверх API — http://localhost:8501 |
 
 ## Запуск
 
@@ -74,6 +75,8 @@ curl -H "Authorization: Token <key>" http://localhost:8000/api/conversations/5/r
 
 Каждый эмбеддинг кэшируется в Redis по хэшу `(модель, текст)` — повторный одинаковый вопрос не делает нового API-вызова вообще (0 токенов, 0 стоимости на этот вызов).
 
+**Retrieval — в два этапа.** Сначала pgvector отбирает 20 кандидатов по cosine similarity (дёшево, по индексу), затем локальный cross-encoder (`cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`, мультиязычный, понимает русский) пересматривает именно эти 20 кандидатов, глядя на пару (вопрос, чанк) вместе, а не как два независимых вектора — и выбирает финальный top-5. Это подняло top-1 retrieval accuracy на eval-датасете с 76% до 88%, так как cosine similarity иногда путает документы с похожей лексикой (например, правила возврата WB и Ozon).
+
 Загрузка документов и построение индекса:
 
 ```bash
@@ -107,6 +110,10 @@ docker compose exec web python manage.py analyze_costs
 - `search_policy_docs` — RAG-поиск по документам (обёртка над `/ask`)
 - `calculate_marketplace_fee` — калькулятор комиссии (обычная Python-функция, без LLM)
 - `generate_product_listing` — структурированное описание товара (Pydantic-схема: `title`, `bullet_points`, `attributes`, `category`; retry до 2 раз при невалидном JSON)
+
+## Демо-UI
+
+`docker compose up` поднимает и минимальный чат-интерфейс на Streamlit — http://localhost:8501. Логин через тот же `/api/auth/token`, дальше обычный чат: сообщение → `/api/agent/chat` → поллинг `/api/conversations/<id>/result/` → ответ с бейджем использованного инструмента (`🔧 calculate_marketplace_fee` и т.д.). Диалог держит контекст (`conversation_id` из ответа передаётся в следующий запрос), кнопка "Новый разговор" сбрасывает тред. Это не часть основного API — просто витрина для демо-видео/скриншотов.
 
 ## Тесты
 

@@ -67,5 +67,17 @@ services:
       redis:
         condition: service_started
 
+  demo:
+    build: ./demo
+    restart: unless-stopped
+    environment:
+      API_BASE: http://web:8000
+    volumes:
+      - ./demo:/app
+    ports:
+      - "8501:8501"
+    depends_on:
+      - web
+
 volumes:
   pgdata:

@@ -44,10 +44,15 @@ Django + DRF, PostgreSQL + pgvector, Redis, Celery, LangGraph поверх LangC
 - Celery + Django — docs.celeryq.dev/en/stable/django
 - Правила WB/Ozon для селлеров — seller.wildberries.ru, seller.ozon.ru
 
+## Фаза 5 — Сверх плана (по запросу после Фазы 4)
+- Re-ranking: cosine top-20 → cross-encoder (`mmarco-mMiniLMv2-L12-H384-v1`) → top-5. Поднял retrieval accuracy с 76% до 88% на eval-датасете
+- Минимальный демо-UI на Streamlit (`docker compose` сервис `demo`, http://localhost:8501) — чат поверх `/api/agent/chat`, для демо-видео и скриншотов
+
 ## Статус
 - [x] Фаза 0 — Окружение
 - [x] Фаза 1 — Django/DRF фундамент
 - [x] Фаза 2 — RAG-ядро (локально на Ollama: bge-m3 + qwen2.5:7b-instruct; переключаемо на OpenAI)
 - [x] Фаза 3 — Агент, function calling, structured output
 - [x] Фаза 4 — Production + Eval + упаковка (инженерная часть)
+- [x] Фаза 5 — Re-ranking + демо-UI
   - [ ] Ручной шаг: демо-видео 2-3 мин + пост в LinkedIn/резюме (раздел 7.4 исходного плана) — это на вас, я не могу записать видео или написать текст от вашего имени

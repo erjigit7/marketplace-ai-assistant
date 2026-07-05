@@ -1,4 +1,5 @@
 import time
+import uuid
 
 from django.core.management.base import BaseCommand
 
@@ -51,10 +52,12 @@ class Command(BaseCommand):
     def _eval_agent_tools(self):
         self.stdout.write(self.style.SUCCESS("\n--- Agent tool selection ---"))
         hits, total_latency, total_cost = 0, 0.0, 0.0
+        run_id = uuid.uuid4().hex[:8]  # fresh thread per run: checkpointer would otherwise
+        # remember previous eval runs under the same thread_id and skip re-calling tools
 
         for i, case in enumerate(AGENT_TOOL_CASES, start=1):
             started = time.monotonic()
-            result = agent.run_agent(thread_id=f"eval-tool-{i}", user_message=case["message"])
+            result = agent.run_agent(thread_id=f"eval-tool-{run_id}-{i}", user_message=case["message"])
             latency = time.monotonic() - started
             total_latency += latency
             total_cost += result["cost_usd"]
