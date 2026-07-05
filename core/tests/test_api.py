@@ -8,7 +8,9 @@ pytestmark = pytest.mark.django_db
 def test_health_endpoint_is_public(api_client):
     response = api_client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["checks"] == {"database": True, "redis": True}
 
 
 def test_documents_require_authentication(api_client):

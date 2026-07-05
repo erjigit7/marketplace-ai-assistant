@@ -1,5 +1,5 @@
 from django.conf import settings
-from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, MessagesState, StateGraph
@@ -84,4 +84,20 @@ def run_agent(thread_id, user_message):
     tool_calls_made = [
         {"tool": m.name, "result": m.content} for m in new_messages if isinstance(m, ToolMessage)
     ]
-    return {"answer": result["messages"][-1].content, "tool_calls": tool_calls_made}
+
+    # Only counts the orchestrating LLM calls (the ReAct loop's own turns) — tokens
+    # spent *inside* a tool (e.g. search_policy_docs' own RAG call) aren't included
+    # here since they're already logged separately when that RAG call runs.
+    input_tokens = output_tokens = 0
+    for m in new_messages:
+        if isinstance(m, AIMessage) and m.usage_metadata:
+            input_tokens += m.usage_metadata.get("input_tokens", 0)
+            output_tokens += m.usage_metadata.get("output_tokens", 0)
+    cost_usd = rag.estimate_cost_usd(rag.get_chat_model(), input_tokens=input_tokens, output_tokens=output_tokens)
+
+    return {
+        "answer": result["messages"][-1].content,
+        "tool_calls": tool_calls_made,
+        "tokens_used": input_tokens + output_tokens,
+        "cost_usd": cost_usd,
+    }

@@ -22,8 +22,8 @@ class ConversationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Conversation
-        fields = ["id", "user", "question", "answer", "created_at"]
-        read_only_fields = ["id", "user", "created_at"]
+        fields = ["id", "user", "question", "answer", "task_id", "created_at"]
+        read_only_fields = ["id", "user", "task_id", "created_at"]
 
 
 class EvalLogSerializer(serializers.ModelSerializer):

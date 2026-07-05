@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'django.contrib.postgres',
     'rest_framework',
     'rest_framework.authtoken',
+    'django_ratelimit',
     'core',
 ]
 
@@ -152,3 +153,23 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 # exposing an OpenAI-compatible endpoint. Same client code, different backend.
 LLM_PROVIDER = os.environ.get('LLM_PROVIDER', 'openai')
 OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://host.docker.internal:11434/v1')
+
+REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
+REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
+REDIS_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'  # app-level cache (embeddings, rate limiting)
+REDIS_CELERY_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/1'  # separate DB so a cache flush can't touch task state
+
+CELERY_BROKER_URL = REDIS_CELERY_URL
+CELERY_RESULT_BACKEND = REDIS_CELERY_URL
+CELERY_TASK_TRACK_STARTED = True
+CELERY_RESULT_EXTENDED = True
+# Exponential backoff on task failure (LLM API hiccups): 1s, 2s, 4s... capped at 60s, 3 tries.
+CELERY_TASK_DEFAULT_RETRY_DELAY = 1
+CELERY_TASK_MAX_RETRIES = 3
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/2',  # separate DB from embeddings/celery
+    }
+}

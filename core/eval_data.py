@@ -68,3 +68,89 @@ EVAL_QUESTIONS = [
         "expected_document": None,  # out-of-scope: fallback ("не знаю") is the correct answer
     },
 ]
+
+
+# Agent tool-selection cases: for each, we know in advance which tool the agent
+# should pick. expected_tool=None means the agent should answer directly with no tool.
+AGENT_TOOL_CASES = [
+    {
+        "message": "Через сколько дней Ozon одобрит возврат, если продавец не ответил?",
+        "expected_tool": "search_policy_docs",
+    },
+    {
+        "message": "Можно ли на Wildberries предлагать деньги за отзыв?",
+        "expected_tool": "search_policy_docs",
+    },
+    {
+        "message": "Какая максимальная длина названия товара на Wildberries?",
+        "expected_tool": "search_policy_docs",
+    },
+    {
+        "message": "Посчитай комиссию для товара категории clothing ценой 1500 рублей на Wildberries",
+        "expected_tool": "calculate_marketplace_fee",
+    },
+    {
+        "message": "Сколько я получу, если продам товар за 2000 рублей в категории beauty на Ozon?",
+        "expected_tool": "calculate_marketplace_fee",
+    },
+    {
+        "message": "Какая комиссия на Ozon для товара дешевле 100 рублей?",
+        "expected_tool": "calculate_marketplace_fee",
+    },
+    {
+        "message": "Сгенерируй описание товара: название 'Разделочная доска бамбук', категория кухня, атрибуты: материал=бамбук, размер=30x20см",
+        "expected_tool": "generate_product_listing",
+    },
+    {
+        "message": "Составь карточку для товара 'Рюкзак городской', категория сумки, атрибуты: объём=20л, цвет=серый",
+        "expected_tool": "generate_product_listing",
+    },
+    {
+        "message": "Привет! Что ты умеешь?",
+        "expected_tool": None,
+    },
+    {
+        "message": "Спасибо, было полезно!",
+        "expected_tool": None,
+    },
+    {
+        "message": "Посчитай комиссию для моего товара на Ozon",  # missing price/category
+        "expected_tool": None,  # should ask for clarification instead of guessing
+    },
+]
+
+
+# Structured-output cases: generate_product_listing must return a value that
+# validates against the ProductListing schema (title/bullet_points/attributes/category).
+PRODUCT_LISTING_CASES = [
+    {
+        "name": "Термокружка 500мл",
+        "category": "посуда",
+        "attributes": {"материал": "нержавеющая сталь", "объем": "500мл", "цвет": "черный"},
+    },
+    {
+        "name": "Разделочная доска бамбук",
+        "category": "кухня",
+        "attributes": {"материал": "бамбук", "размер": "30x20см"},
+    },
+    {
+        "name": "Рюкзак городской",
+        "category": "сумки",
+        "attributes": {"объём": "20л", "цвет": "серый"},
+    },
+    {
+        "name": "Силиконовый чехол для телефона",
+        "category": "аксессуары",
+        "attributes": {"материал": "силикон", "цвет": "прозрачный"},
+    },
+    {
+        "name": "Беспроводные наушники",
+        "category": "электроника",
+        "attributes": {"тип": "вкладыши", "время работы": "6 часов", "цвет": "белый"},
+    },
+    {
+        "name": "Детская игрушка-пирамидка",
+        "category": "игрушки",
+        "attributes": {"материал": "дерево", "возраст": "1-3 года"},
+    },
+]

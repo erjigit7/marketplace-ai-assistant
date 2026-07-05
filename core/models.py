@@ -65,6 +65,7 @@ class Conversation(models.Model):
     )
     question = models.TextField()
     answer = models.TextField(blank=True)
+    task_id = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -75,6 +76,7 @@ class EvalLog(models.Model):
     conversation = models.ForeignKey(
         Conversation, on_delete=models.SET_NULL, null=True, blank=True, related_name="eval_logs"
     )
+    request_type = models.CharField(max_length=20, blank=True, default="")  # "ask" or "agent_chat"
     prompt = models.TextField()
     response = models.TextField(blank=True)
     tokens_used = models.PositiveIntegerField(default=0)

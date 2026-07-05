@@ -8,3 +8,4 @@ staticfiles/
 .vs/
 .pytest_cache/
 .claude/
+reports/

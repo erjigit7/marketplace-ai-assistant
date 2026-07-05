@@ -5,6 +5,16 @@
 ## Стек
 Django + DRF, PostgreSQL + pgvector, Redis, Celery, LangGraph, OpenAI API, Pydantic, Docker Compose.
 
+## Сервисы (docker-compose)
+
+| Сервис | Назначение |
+|---|---|
+| `web` | Django + DRF API |
+| `worker` | Celery-воркер — выполняет тяжёлые LLM-вызовы вне HTTP-потока |
+| `db` | PostgreSQL + pgvector |
+| `redis` | брокер/backend Celery (db 1), кэш эмбеддингов (db 0), кэш rate-limit (db 2) |
+| `flower` | мониторинг очереди Celery — http://localhost:5555 |
+
 ## Запуск
 
 ```bash
@@ -13,7 +23,7 @@ docker compose up -d --build
 docker compose exec web python manage.py migrate
 ```
 
-Проверка: `curl http://localhost:8000/health` → `{"status": "ok"}`.
+Проверка: `curl http://localhost:8000/health` → `{"status": "ok", "checks": {"database": true, "redis": true}}`.
 
 ## Аутентификация
 
@@ -31,13 +41,27 @@ curl -X POST http://localhost:8000/api/auth/token \
 
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/health` | health-check, без авторизации |
-| POST | `/api/ask` | RAG: вопрос → ответ с указанием источника (или "не знаю") |
-| POST | `/api/agent/chat` | LangGraph-агент: сам выбирает инструмент (RAG / калькулятор комиссии / генератор описания) |
+| GET | `/health` | health-check (проверяет БД и Redis), без авторизации |
+| POST | `/api/ask` | ставит RAG-запрос в очередь Celery, отвечает `202` с `task_id` (лимит 20/мин на пользователя) |
+| POST | `/api/agent/chat` | ставит агентский запрос в очередь, `202` с `task_id` (лимит 15/мин) |
+| GET | `/api/conversations/<id>/result/` | опрос результата задачи (`PENDING`/`STARTED`/`SUCCESS`/`FAILURE`) |
 | CRUD | `/api/documents/` | документы для RAG (политики/правила площадок) |
 | CRUD | `/api/products/` | товары продавца |
 | CRUD | `/api/conversations/` | история запросов к ассистенту (только свои) |
 | CRUD | `/api/eval-logs/` | логи для оценки качества/стоимости |
+
+### Асинхронный flow
+
+`/api/ask` и `/api/agent/chat` сразу отвечают `202 {"conversation_id", "task_id", "status": "pending"}` — сам LLM-вызов уходит в Celery-задачу (`worker`), а не держит HTTP-соединение. Результат забирается отдельным запросом:
+
+```bash
+curl -X POST -H "Authorization: Token <key>" -d '{"question": "..."}' http://localhost:8000/api/ask
+# -> {"conversation_id": 5, "task_id": "...", "status": "pending"}
+curl -H "Authorization: Token <key>" http://localhost:8000/api/conversations/5/result/
+# -> {"status": "SUCCESS", "result": {"answer": "...", "sources": [...]}}
+```
+
+При сбое LLM API/Ollama задача автоматически повторяется с exponential backoff (1с, 2с, 4с..., до 3 попыток).
 
 ## RAG: эмбеддинги и LLM
 
@@ -48,6 +72,8 @@ curl -X POST http://localhost:8000/api/auth/token \
 
 **Важно:** эмбеддинги разных моделей несовместимы по размерности и векторному пространству. При смене `LLM_PROVIDER` весь корпус нужно переиндексировать заново.
 
+Каждый эмбеддинг кэшируется в Redis по хэшу `(модель, текст)` — повторный одинаковый вопрос не делает нового API-вызова вообще (0 токенов, 0 стоимости на этот вызов).
+
 Загрузка документов и построение индекса:
 
 ```bash
@@ -55,10 +81,22 @@ docker compose exec web python manage.py load_seed_documents
 docker compose exec web python manage.py ingest_documents
 ```
 
-Черновой eval (15+ вопросов, сверка топ-источника и ручная проверка ответа):
+## Eval и стоимость
+
+`run_eval` прогоняет три типа кейсов из `core/eval_data.py` и печатает scorecard:
 
 ```bash
 docker compose exec web python manage.py run_eval
+```
+
+- **Retrieval accuracy** — топ-источник RAG совпадает с ожидаемым документом
+- **Tool selection accuracy** — агент вызвал (или не вызвал) правильный инструмент
+- **JSON validity rate** — `generate_product_listing` вернул валидную Pydantic-схему
+
+`analyze_costs` строит в Pandas разбивку по логам (`EvalLog`) — latency p50/p95, стоимость по типу запроса (`ask` vs `agent_chat`), латентность по дням — и сохраняет графики в `reports/`:
+
+```bash
+docker compose exec web python manage.py analyze_costs
 ```
 
 ## Агент

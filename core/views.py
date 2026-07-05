@@ -1,11 +1,12 @@
-import time
-
+from celery.result import AsyncResult
+from django.db import connection
 from django.http import JsonResponse
+from django_ratelimit.decorators import ratelimit
 from rest_framework import viewsets
-from rest_framework.decorators import api_view
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 
-from . import agent, rag
+from . import rag
 from .models import Conversation, Document, EvalLog, Product
 from .serializers import (
     ConversationSerializer,
@@ -13,42 +14,45 @@ from .serializers import (
     EvalLogSerializer,
     ProductSerializer,
 )
+from .tasks import run_agent_chat_task, run_ask_task
 
 
 def health(request):
-    return JsonResponse({"status": "ok"})
+    checks = {"database": False, "redis": False}
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        checks["database"] = True
+    except Exception:
+        pass
+
+    try:
+        checks["redis"] = rag.get_redis_client().ping()
+    except Exception:
+        pass
+
+    status = 200 if all(checks.values()) else 503
+    return JsonResponse({"status": "ok" if status == 200 else "degraded", "checks": checks}, status=status)
 
 
 @api_view(["POST"])
+@ratelimit(key="user", rate="20/m", method="POST", block=True)
 def ask(request):
     question = request.data.get("question", "").strip()
     if not question:
         return Response({"detail": "question is required"}, status=400)
 
-    started_at = time.monotonic()
-    result = rag.generate_answer(question)
-    latency_ms = (time.monotonic() - started_at) * 1000
+    conversation = Conversation.objects.create(user=request.user, question=question)
+    task = run_ask_task.delay(conversation.id, question)
+    conversation.task_id = task.id
+    conversation.save(update_fields=["task_id"])
 
-    conversation = Conversation.objects.create(
-        user=request.user, question=question, answer=result["answer"]
-    )
-    EvalLog.objects.create(
-        conversation=conversation,
-        prompt=question,
-        response=result["answer"],
-        latency_ms=latency_ms,
-    )
-
-    return Response(
-        {
-            "conversation_id": conversation.id,
-            "answer": result["answer"],
-            "sources": result["sources"],
-        }
-    )
+    return Response({"conversation_id": conversation.id, "task_id": task.id, "status": "pending"}, status=202)
 
 
 @api_view(["POST"])
+@ratelimit(key="user", rate="15/m", method="POST", block=True)
 def agent_chat(request):
     message = request.data.get("message", "").strip()
     if not message:
@@ -63,27 +67,11 @@ def agent_chat(request):
     else:
         conversation = Conversation.objects.create(user=request.user, question=message)
 
-    started_at = time.monotonic()
-    result = agent.run_agent(thread_id=conversation.id, user_message=message)
-    latency_ms = (time.monotonic() - started_at) * 1000
+    task = run_agent_chat_task.delay(conversation.id, message)
+    conversation.task_id = task.id
+    conversation.save(update_fields=["task_id"])
 
-    conversation.question = message
-    conversation.answer = result["answer"]
-    conversation.save(update_fields=["question", "answer"])
-    EvalLog.objects.create(
-        conversation=conversation,
-        prompt=message,
-        response=result["answer"],
-        latency_ms=latency_ms,
-    )
-
-    return Response(
-        {
-            "conversation_id": conversation.id,
-            "answer": result["answer"],
-            "tool_calls": result["tool_calls"],
-        }
-    )
+    return Response({"conversation_id": conversation.id, "task_id": task.id, "status": "pending"}, status=202)
 
 
 class DocumentViewSet(viewsets.ModelViewSet):
@@ -104,6 +92,20 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=["get"])
+    def result(self, request, pk=None):
+        conversation = self.get_object()
+        if not conversation.task_id:
+            return Response({"detail": "no task associated with this conversation"}, status=404)
+
+        async_result = AsyncResult(conversation.task_id)
+        payload = {"status": async_result.status}
+        if async_result.successful():
+            payload["result"] = async_result.result
+        elif async_result.failed():
+            payload["error"] = str(async_result.result)
+        return Response(payload)
 
 
 class EvalLogViewSet(viewsets.ModelViewSet):

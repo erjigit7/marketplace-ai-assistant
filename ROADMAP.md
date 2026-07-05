@@ -49,4 +49,5 @@ Django + DRF, PostgreSQL + pgvector, Redis, Celery, LangGraph поверх LangC
 - [x] Фаза 1 — Django/DRF фундамент
 - [x] Фаза 2 — RAG-ядро (локально на Ollama: bge-m3 + qwen2.5:7b-instruct; переключаемо на OpenAI)
 - [x] Фаза 3 — Агент, function calling, structured output
-- [ ] Фаза 4 — Production + Eval + упаковка
+- [x] Фаза 4 — Production + Eval + упаковка (инженерная часть)
+  - [ ] Ручной шаг: демо-видео 2-3 мин + пост в LinkedIn/резюме (раздел 7.4 исходного плана) — это на вас, я не могу записать видео или написать текст от вашего имени
