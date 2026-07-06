@@ -1,5 +1,7 @@
 # Marketplace AI Assistant
 
+**English summary:** A production-style backend that helps Wildberries/Ozon sellers get sourced answers about marketplace policies, calculate fees, and generate structured product listings. Combines a RAG pipeline (PostgreSQL + pgvector, two-stage retrieval with cross-encoder reranking — 88% top-1 accuracy) with a LangGraph agent that autonomously picks between three tools (policy search, fee calculator, Pydantic-validated structured-output generator). Built with production concerns most portfolio projects skip: async LLM calls via Celery/Redis with automatic retry, per-request cost/token tracking, rate limiting, and a 34-case evaluation suite (100% tool-selection accuracy, 100% schema validity). Runs on either the OpenAI API or fully local models (Ollama) via a single config switch — Django, DRF, LangChain/LangGraph, Docker Compose. Solo project, built end-to-end. Repo: [github.com/erjigit7/marketplace-ai-assistant](https://github.com/erjigit7/marketplace-ai-assistant).
+
 Ассистент для продавцов маркетплейсов (Wildberries/Ozon): отвечает на вопросы по политикам площадки (RAG), генерирует структурированные описания товаров и действует как агент, выбирающий нужный инструмент. Портфолио-проект, план — [ROADMAP.md](ROADMAP.md).
 
 ## Стек
